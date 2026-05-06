@@ -1,81 +1,62 @@
 /* =========================================================
    端午活動頁 — Interactions
-   - 錨點平滑滾動
-   - 滾動跟隨高亮(scrollspy)
-   - sticky 導覽列陰影狀態
-   - reveal on scroll
    ========================================================= */
-(function () {
-  'use strict';
+(() => {
+  // 1) Sticky shadow toggle
+  const anchor = document.querySelector('.module-anchor');
+  if (anchor){
+    const sentinel = document.createElement('div');
+    sentinel.style.cssText = 'position:absolute;top:0;height:1px;width:1px;';
+    anchor.parentNode.insertBefore(sentinel, anchor);
+    new IntersectionObserver(([e]) => {
+      anchor.classList.toggle('is-stuck', !e.isIntersecting);
+    }, { rootMargin: '0px 0px 0px 0px', threshold: 0 }).observe(sentinel);
+  }
 
-  const anchorBar  = document.querySelector('[data-module="anchor"]');
-  const anchorPills = document.querySelectorAll('.anchor-pill');
-  const sections   = document.querySelectorAll('[data-product-section]');
-  const reveals    = document.querySelectorAll('.reveal');
-
-  /* ---------- 錨點點擊 ---------- */
-  anchorPills.forEach((pill) => {
-    pill.addEventListener('click', (e) => {
-      e.preventDefault();
-      const id = pill.getAttribute('href').slice(1);
-      const target = document.getElementById(id);
+  // 2) Anchor pills smooth scroll + offset for sticky bar
+  const pills = document.querySelectorAll('.anchor-pill');
+  pills.forEach(p => {
+    p.addEventListener('click', (ev) => {
+      const id = p.getAttribute('href');
+      if (!id || !id.startsWith('#')) return;
+      const target = document.querySelector(id);
       if (!target) return;
-      const offset = (anchorBar?.offsetHeight || 0) + 12;
-      const y = target.getBoundingClientRect().top + window.pageYOffset - offset;
+      ev.preventDefault();
+      const stickyH = anchor && getComputedStyle(anchor).position === 'sticky'
+        ? anchor.getBoundingClientRect().height : 0;
+      const y = target.getBoundingClientRect().top + window.pageYOffset - stickyH - 12;
       window.scrollTo({ top: y, behavior: 'smooth' });
     });
   });
 
-  /* ---------- Scrollspy (高亮目前區塊) ---------- */
-  const setActive = (id) => {
-    anchorPills.forEach((p) => {
-      const match = p.getAttribute('href') === '#' + id;
-      p.classList.toggle('is-active', match);
-      // 把 active pill 滾入視野(行動版橫向捲)
-      if (match && window.innerWidth < 960) {
-        p.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  // 3) Scrollspy — highlight active pill
+  const sections = [...document.querySelectorAll('[data-product-section]')];
+  const map = new Map(sections.map(s => [s.id, document.querySelector(`.anchor-pill[href="#${s.id}"]`)]));
+  const spy = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      const pill = map.get(en.target.id);
+      if (!pill) return;
+      if (en.isIntersecting){
+        pills.forEach(p => p.classList.remove('is-active'));
+        pill.classList.add('is-active');
+        // mobile auto-scroll active pill into view
+        if (window.matchMedia('(max-width: 768px)').matches){
+          pill.scrollIntoView({ behavior:'smooth', inline:'center', block:'nearest' });
+        }
       }
     });
-  };
+  }, { rootMargin: '-40% 0px -50% 0px', threshold: 0 });
+  sections.forEach(s => spy.observe(s));
 
-  if ('IntersectionObserver' in window) {
-    const spy = new IntersectionObserver((entries) => {
-      // 取得最靠近視窗中央的區塊
-      let best = null;
-      entries.forEach((en) => {
-        if (en.isIntersecting) {
-          if (!best || en.intersectionRatio > best.intersectionRatio) best = en;
-        }
-      });
-      if (best) setActive(best.target.id);
-    }, {
-      rootMargin: '-30% 0px -55% 0px',
-      threshold: [0, 0.25, 0.5, 0.75, 1],
+  // 4) Reveal on scroll
+  const revealItems = document.querySelectorAll('.reveal');
+  const revealObs = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (en.isIntersecting){
+        en.target.classList.add('is-in');
+        revealObs.unobserve(en.target);
+      }
     });
-    sections.forEach((s) => spy.observe(s));
-  }
-
-  /* ---------- Sticky bar 陰影 ---------- */
-  const onScroll = () => {
-    if (!anchorBar) return;
-    const stuck = window.scrollY > (document.querySelector('.module-kv')?.offsetHeight || 400) - 1;
-    anchorBar.classList.toggle('is-stuck', stuck);
-  };
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-
-  /* ---------- Reveal on scroll ---------- */
-  if ('IntersectionObserver' in window) {
-    const rev = new IntersectionObserver((entries) => {
-      entries.forEach((en) => {
-        if (en.isIntersecting) {
-          en.target.classList.add('is-in');
-          rev.unobserve(en.target);
-        }
-      });
-    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
-    reveals.forEach((el) => rev.observe(el));
-  } else {
-    reveals.forEach((el) => el.classList.add('is-in'));
-  }
+  }, { threshold: 0.12 });
+  revealItems.forEach(el => revealObs.observe(el));
 })();
